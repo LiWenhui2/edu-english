@@ -1,9 +1,9 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { sha256 } from '../../../common/utils/hash.util';
-import { RedisService } from '../../../infrastructure/redis/redis.service';
+import { sha256 } from '@/common/utils/hash.util';
+import { RedisService } from '@/infrastructure/redis/redis.service';
 import { UserSessionDto } from '../dto/user-session.dto';
 import { SessionRepository } from '../session/session.repository';
-import { generateRandomToken } from '../../../common/utils/random.util';
+import { generateRandomToken } from '@/common/utils/random.util';
 
 @Injectable()
 export class RefreshTokenService {
@@ -16,6 +16,13 @@ export class RefreshTokenService {
     const usedKey = `auth:refresh:used:${tokenHash}`;
     // 重放检测
     if (await this.redis.get(usedKey)) {
+      //删除数据库该session记录
+      const id = await this.redis.get(`auth:refresh:${tokenHash}`);
+      if (id) {
+        await this.sessionRepo.deleteById(Number(id));
+      } else {
+        await this.sessionRepo.deleteByHashToken(tokenHash);
+      }
       throw new UnauthorizedException('refresh token reuse detected');
     }
     const sessionId = await this.redis.get(`auth:refresh:${tokenHash}`);
@@ -26,10 +33,10 @@ export class RefreshTokenService {
       session = await this.sessionRepo.findByTokenHash(tokenHash);
     }
     if (!session) {
-      throw new UnauthorizedException('refresh token 已过期');
+      throw new UnauthorizedException('Invalid refresh token');
     }
     if (session.refreshExpiresAt < new Date()) {
-      throw new UnauthorizedException('refresh token 已过期');
+      throw new UnauthorizedException('Invalid refresh token');
     }
     const remainingTtl = Math.max(
       Math.floor((session.refreshExpiresAt.getTime() - Date.now()) / 1000),
@@ -38,13 +45,14 @@ export class RefreshTokenService {
     await this.redis.set(usedKey, '1', remainingTtl);
     const newRefreshToken = generateRandomToken();
     const newHash = sha256(newRefreshToken);
-    await this.sessionRepo.rotateToken(Number(sessionId), newHash);
+    console.log('Rotating refresh token for session:', session.id);
+    await this.sessionRepo.rotateToken(Number(session.id), newHash);
     //写入Redis
     await this.redis.set(
       `auth:refresh:${newHash}`,
       String(sessionId),
       remainingTtl,
     );
-    return { session, newRefreshToken };
+    return { userId: session.id, newRefreshToken };
   }
 }
