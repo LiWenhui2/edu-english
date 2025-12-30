@@ -1,0 +1,146 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model users {
+  id                   BigInt               @id @default(autoincrement())
+  username             String               @unique @db.VarChar(50)
+  password             String               @db.VarChar(255)
+  email                String?              @db.VarChar(255)
+  avatar               String?              @db.VarChar(500)
+  status               Int?                 @default(1)
+  auth_id              String?              @db.Uuid
+  updated_at           DateTime?            @default(now()) @db.Timestamp(6)
+  create_at            DateTime?            @default(now()) @db.Timestamp(6)
+  contents             contents[]
+  likes                likes[]
+  user_course_progress userCourseProgress[]
+  user_sessions        userSession[]
+  courses              courses[]
+
+  @@unique([username], map: "users_pk_2")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model contents {
+  id                    BigInt                @id(map: "content_pkey") @default(autoincrement())
+  file_url              String
+  cover                 String?
+  created_at            DateTime?             @default(now()) @db.Timestamp(6)
+  description           String?
+  user_id               BigInt?
+  course_id             BigInt?
+  structure_id          BigInt?
+  content_type          Int?                  @db.SmallInt
+  title                 String?               @db.VarChar(200)
+  page_order            Int?
+  start_page            Int?
+  like_count            Int?                  @default(0)
+  update_at             DateTime?             @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)")) @db.Timestamp(6)
+  courses               courses?              @relation(fields: [course_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "content_course_fk")
+  course_structure      courseStructure?      @relation(fields: [structure_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "content_structure_fk")
+  users                 users?                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "content_users_fk")
+  likes                 likes[]
+  user_learning_records userLearningRecords[] @ignore
+
+  @@unique([course_id, page_order], map: "contents_pk")
+  @@unique([user_id, title], map: "contents_pk_2")
+  @@unique([user_id, file_url], map: "contents_pk_3")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model courseStructure {
+  id                     BigInt            @id @default(autoincrement())
+  course_id              BigInt
+  level                  Int               @db.SmallInt
+  title                  String            @db.VarChar(100)
+  parent_id              BigInt?
+  created_at             DateTime?         @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)")) @db.Timestamp(6)
+  contents               contents[]
+  courses                courses           @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  course_structure       courseStructure?  @relation("course_structureTocourse_structure", fields: [parent_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  other_course_structure courseStructure[] @relation("course_structureTocourse_structure")
+
+  @@index([course_id], map: "idx_course_structure_course")
+  @@map("course_structure")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model courses {
+  id                   BigInt               @id(map: "courses_pk") @default(autoincrement())
+  name                 String               @db.VarChar(100)
+  description          String?
+  total_pages          Int                  @default(0)
+  create_at            DateTime?            @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)")) @db.Timestamp(6)
+  status               Int?                 @default(1) @db.SmallInt
+  contents             contents[]
+  course_structure     courseStructure[]
+  user_course_progress userCourseProgress[]
+  users                users[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model likes {
+  id         BigInt    @id(map: "node_likes_pkey") @default(autoincrement())
+  user_id    BigInt
+  content_id BigInt
+  created_at DateTime? @default(now()) @db.Timestamp(6)
+  contents   contents  @relation(fields: [content_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "node_likes_node_id_fkey")
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "node_likes_user_id_fkey")
+
+  @@unique([user_id, content_id], map: "node_likes_user_id_node_id_key")
+  @@index([content_id], map: "idx_node_likes_node")
+  @@index([user_id], map: "idx_node_likes_user")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model userCourseProgress {
+  id         BigInt    @id @default(autoincrement())
+  user_id    BigInt
+  course_id  BigInt
+  page_order Int
+  updated_at DateTime? @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)")) @db.Timestamp(6)
+  courses    courses   @relation(fields: [course_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users      users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, course_id])
+  @@index([user_id], map: "idx_user_course_progress_user")
+  @@map("user_course_progress")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model userLearningRecords {
+  id         BigInt    @id @default(autoincrement())
+  user_id    BigInt
+  course_id  BigInt
+  content_id BigInt
+  extra      Json?
+  created_at DateTime? @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)")) @db.Timestamp(6)
+  contents   contents  @relation(fields: [content_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "user_learning_records_content_id_fk")
+
+  @@index([course_id, created_at(sort: Desc)], map: "idx_learning_records_course")
+  @@index([user_id, created_at(sort: Desc)], map: "idx_learning_records_user")
+  @@map("user_learning_records")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model userSession {
+  id               BigInt    @id @default(autoincrement())
+  userId           BigInt    @map("user_id")
+  refreshTokenHash String    @unique @map("refresh_token_hash") @db.VarChar(255)
+  refreshExpiresAt DateTime  @map("refresh_expires_at") @db.Timestamp(6)
+  userAgent        String?   @map("user_agent")
+  ipAddress        String?   @map("ip_address") @db.VarChar(45)
+  createdAt        DateTime? @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)")) @map("created_at") @db.Timestamp(6)
+  rotatedAt        DateTime? @default(dbgenerated("(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai'::text)")) @map("rotated_at") @db.Timestamp(6)
+  users            users     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([refreshExpiresAt], map: "idx_user_sessions_expires_at")
+  @@index([userId], map: "idx_user_sessions_user_id")
+  @@map("user_sessions")
+}
